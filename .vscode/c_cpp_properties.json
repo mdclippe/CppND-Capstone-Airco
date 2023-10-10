@@ -1,0 +1,15 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/home/mdclippe/Qt"
+            ],
+            "defines": [],
+            "cStandard": "c17",
+            "configurationProvider": "Makefile tools"
+        }
+    ],
+    "version": 4
+}
