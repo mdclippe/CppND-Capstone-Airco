@@ -30,7 +30,7 @@ In this project i have used QT for a very simple GUI just to get myself familiar
   * Windows: recommend using [MinGW](http://www.mingw.org/)
 * Qt 6.5.2
   * used the binary installer : https://www.qt.io/download-qt-installer-oss?hsCtaTracking=99d9dd4f-5681-48d2-b096-470725510d34%7C074ddad0-fdef-4e53-8aa8-5e8a876d6ab4
-  
+  * The location of the Qt/6.5.2/gcc_64 must be passed to cmake, either via commandline or via the cmakelists.txt
 ## Basic Build Instructions
 
 1. Clone this repo.
