@@ -162,11 +162,11 @@ void Airco::eventHandlingLoop() {
         }
     }
 }
-void Airco::addObserver(AircoObserver* observer) {
+void Airco::addObserver(std::shared_ptr<AircoObserver> observer) {
     _observers.emplace_back(observer);
 }
 
-void Airco::removeObserver(AircoObserver* observer) {
+void Airco::removeObserver(std::shared_ptr<AircoObserver> observer) {
     // Implement observer removal logic if needed
     auto it = std::find(_observers.begin(), _observers.end(), observer);
     if (it != _observers.end()) {

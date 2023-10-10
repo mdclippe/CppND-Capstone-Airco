@@ -60,8 +60,8 @@ public :
         }
     };
 
-    void addObserver(AircoObserver* observer);
-    void removeObserver(AircoObserver* observer);
+    void addObserver(std::shared_ptr<AircoObserver> observer);
+    void removeObserver(std::shared_ptr<AircoObserver> observer);
     void notifyTargetTemperatureChange(int newTemperature);
     void notifyCurrentTemperatureChange(int newTemperature);
     void notifyStatusChange(std::string& status);
@@ -78,7 +78,7 @@ private:
     std::unique_ptr<std::thread> _eventHandlingThread;
     std::atomic<bool> _runningEventHandler = true;
 
-    std::vector<AircoObserver*> _observers;
+    std::vector<std::shared_ptr<AircoObserver>> _observers;
     int _targetTemperature;
     int _currentTemperature;
     AircoStates _state;

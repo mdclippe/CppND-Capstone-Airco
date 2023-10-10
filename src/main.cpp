@@ -11,17 +11,16 @@
 int main(int argc, char** argv)
 {
     std::shared_ptr<MessageQueue<int>> msgQueue = std::make_shared<MessageQueue<int>>();    
-    TemperatureNode node1(msgQueue,1);
+    std::shared_ptr<TemperatureNode> node1 = std::make_shared<TemperatureNode>(msgQueue,1);
     
-    
-    Airco airco1(msgQueue);
-    Monitor monitor;
-    airco1.addObserver(&monitor);
-    airco1.addObserver(&node1);
+    std::shared_ptr<Airco> airco = std::make_shared<Airco>(msgQueue);
+    std::shared_ptr<Monitor> monitor = std::make_shared<Monitor>();
+    airco->addObserver(monitor);
+    airco->addObserver(node1);
 
     QApplication app(argc, argv);
 
-    MainWindow w(std::move(monitor), airco1, node1);
+    MainWindow w(monitor, airco, node1);
     w.show();
     return app.exec();
 }

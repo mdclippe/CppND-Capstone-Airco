@@ -14,7 +14,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit MainWindow(Monitor&& moni,Airco& airco,TemperatureNode& node, QWidget *parent = nullptr);
+    explicit MainWindow(std::shared_ptr<Monitor>& moni,std::shared_ptr<Airco>& airco,std::shared_ptr<TemperatureNode>& node, QWidget *parent = nullptr);
     ~MainWindow();
 private slots:
     void on_sldTargetTemp_valueChanged(int value);
@@ -27,8 +27,8 @@ private slots:
     void on_btnSimulateTemp_toggled(bool checked);
 private:
     Ui::MainWindow *ui;
-    Monitor& _monitor;
-    Airco& _airco;
-    TemperatureNode& _temperatureNode;
+    std::shared_ptr<Monitor>& _monitor;
+    std::shared_ptr<Airco>& _airco;
+    std::shared_ptr<TemperatureNode>& _temperatureNode;
 };
 #endif // MAINWINDOW_H
