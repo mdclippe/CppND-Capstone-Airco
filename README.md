@@ -40,14 +40,35 @@ In this project i have used QT for a very simple GUI just to get myself familiar
 
 ## Usage
 * AUTO mode
-** Turn on the Airco
-** turn on the temperature simulation (this will increase or decrease to the target temperature)
-** changing the target temperature will modify the state to heating or cooling 
+- Turn on the Airco
+- turn on the temperature simulation (this will increase or decrease to the target temperature)
+- changing the target temperature will modify the state to heating or cooling 
+- if the target temperature is reached, the Airco will go to Standby
 
 * HEATING mode
-** This will only heat when required
-** Note : in this mode the temperature simulation will still go towards the set target temperature
+This will only heat when required
+Note : in this mode the temperature simulation will still go towards the set target temperature
 
 * COOLING mode
-** This will only cool when required
-** Note : in this mode the temperature simulation will still go towards the set target temperature
+This will only cool when required
+Note : in this mode the temperature simulation will still go towards the set target temperature
+
+## Rubric Points
+1. Object oriented programming
+
+- Object Oriented programming : see Airco.h
+- Monitor and temperaturenode inherit from virtual AircoObserver class 
+- Templates : see MessageQueue.cpp
+
+2. Memory management
+- Project uses references : see Mainwindow.cpp constructor
+- Destructors : implemented throughout and these are responsible for stopping threads.
+- move semantcos : see MessageQueue.cpp and TemperatureNode.cpp (30);
+- smart pointers : shared pointers and unique pointers are used where possible
+
+3. Concurrency
+- multithreaded : TemperatureNode has a simulation thread, Airco has an eventhandler thread and a temperature receiving thread
+- locking : Airco contains the lock_guard mechanism the protect the variable, same as MessageQueue.cpp
+- condition_variable : see Airco.cpp
+
+

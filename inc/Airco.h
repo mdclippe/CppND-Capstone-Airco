@@ -10,7 +10,7 @@
 #include <algorithm>
 
 
-enum class AircoStates {OFF, COOLING, HEATING, STANDBYE};
+enum class AircoStates {OFF, COOLING, HEATING, STANDBY};
 enum class AircoModes {AUTO, MANUAL_HEAT, MANUAL_COOL};
 
 class Airco {
@@ -94,7 +94,7 @@ private:
     void updateState();
     void heat();
     void cool();
-    void standbye();
+    void standby();
     void setMode(AircoModes mode);
     std::string getStatus(AircoStates state) const;
 };

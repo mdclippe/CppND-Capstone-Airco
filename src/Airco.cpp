@@ -21,9 +21,9 @@ void Airco::cool()
     setState(AircoStates::COOLING);
 }
 
-void Airco::standbye()
+void Airco::standby()
 {
-    setState(AircoStates::STANDBYE);
+    setState(AircoStates::STANDBY);
 }
 
 void Airco::setMode(AircoModes mode)
@@ -37,7 +37,7 @@ void Airco::togglePower()
     _isOn = !_isOn;
     if (_isOn)
     {
-        setState(AircoStates::STANDBYE);
+        setState(AircoStates::STANDBY);
         start();
     }
     else
@@ -98,7 +98,7 @@ void Airco::updateState()
         }
         else
         {
-            standbye();
+            standby();
         }
     }
     else
@@ -113,7 +113,7 @@ void Airco::updateState()
                 }   
                 else
                 {
-                    standbye();
+                    standby();
                 }
                 break;
             }
@@ -125,13 +125,13 @@ void Airco::updateState()
                 }   
                 else
                 {
-                    standbye();
+                    standby();
                 }
                 break;
             }
             default :
             {
-                standbye();
+                standby();
                 break;
             }
         }
@@ -206,9 +206,9 @@ std::string Airco::getStatus(AircoStates state) const {
             status = "HEATING";
             break;
         }
-        case AircoStates::STANDBYE :
+        case AircoStates::STANDBY :
         {
-            status = "STANDBYE";
+            status = "STANDBY";
             break;
         }
         case AircoStates::OFF:

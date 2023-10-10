@@ -36,6 +36,13 @@ void MessageQueue<T>::clear()
     std::swap(_queue, emptyQueue);
 }
 
+
+/**
+ * @brief This is to make sure that there is no blocking wait in the queue. This is not really necessary
+ * as the condition variable also has a timeout, but i think it can do no harm to have it.
+ * 
+ * @tparam T 
+ */
 template <typename T>
 void MessageQueue<T>::unblock()
 {
