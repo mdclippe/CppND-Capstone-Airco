@@ -49,20 +49,31 @@ void MainWindow::on_btnSimulateTemp_toggled(bool checked)
     }
 }
 
+// The mode buttons are auto-exclusive : checking one unchecks the other, which
+// also emits toggled. Only the button that gets checked sends its mode.
 void MainWindow::on_btnAUTO_toggled(bool checked)
 {
-    _airco->handleEvent("auto_requested");
+    if (checked)
+    {
+        _airco->handleEvent("auto_requested");
+    }
 }
 
 void MainWindow::on_btnCOOL_toggled(bool checked)
 {
-    _airco->handleEvent("cooling_requested");
+    if (checked)
+    {
+        _airco->handleEvent("cooling_requested");
+    }
 }
 
 
 void MainWindow::on_btnHEAT_toggled(bool checked)
 {
-    _airco->handleEvent("heating_requested");
+    if (checked)
+    {
+        _airco->handleEvent("heating_requested");
+    }
 }
 
 void MainWindow::updateStatus(const QString& newStatus){

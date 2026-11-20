@@ -69,7 +69,7 @@ protected:
         return waitUntil([&] { return display->lastStatus() == status; }, kScenarioTimeout);
     }
 
-    std::shared_ptr<MessageQueue<int>> msgQueue = std::make_shared<MessageQueue<int>>();
+    std::shared_ptr<MessageQueue<int>> msgQueue = std::make_shared<MessageQueue<int>>(kTemperatureQueueCapacity);
     std::shared_ptr<TemperatureNode> node1 = std::make_shared<TemperatureNode>(msgQueue, 1);
     std::shared_ptr<Airco> airco = std::make_shared<Airco>(msgQueue);
     std::shared_ptr<RecordingObserver> display = std::make_shared<RecordingObserver>();
@@ -166,7 +166,7 @@ TEST(AircoApplicationShutdownTest, ShutsDownCleanlyWhileEverythingIsRunning)
     const auto start = std::chrono::steady_clock::now();
     {
         // same objects and declaration order as main.cpp
-        auto msgQueue = std::make_shared<MessageQueue<int>>();
+        auto msgQueue = std::make_shared<MessageQueue<int>>(kTemperatureQueueCapacity);
         auto node1 = std::make_shared<TemperatureNode>(msgQueue, 1);
         auto airco = std::make_shared<Airco>(msgQueue);
         auto display = std::make_shared<RecordingObserver>();

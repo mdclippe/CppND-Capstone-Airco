@@ -6,6 +6,7 @@
 #include <future>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "MessageQueue.h"
@@ -89,6 +90,52 @@ TEST(MessageQueueTest, UnblockStillDeliversQueuedMessages)
     queue.unblock();
 
     EXPECT_EQ(7, queue.receive());
+    EXPECT_FALSE(queue.receive().has_value());
+}
+
+TEST(MessageQueueTest, UnblockOnlyAppliesToOneReceive)
+{
+    MessageQueue<int> queue;
+    queue.unblock();
+    ASSERT_FALSE(queue.receive().has_value());
+
+    // the next receive waits for a message again instead of returning at once
+    auto pending = std::async(std::launch::async, [&queue] { return queue.receive(); });
+    std::this_thread::sleep_for(50ms);
+    queue.send(3);
+
+    ASSERT_EQ(std::future_status::ready, pending.wait_for(500ms));
+    EXPECT_EQ(3, pending.get());
+}
+
+TEST(MessageQueueTest, IsUnboundedByDefault)
+{
+    MessageQueue<int> queue;
+    for (int i = 0; i < 100; ++i)
+    {
+        int message = i;
+        queue.send(std::move(message));
+    }
+
+    for (int i = 0; i < 100; ++i)
+    {
+        ASSERT_EQ(i, queue.receive());
+    }
+}
+
+TEST(MessageQueueTest, FullBoundedQueueDropsTheOldestMessages)
+{
+    MessageQueue<int> queue(3);
+    for (int i = 1; i <= 5; ++i)
+    {
+        int message = i;
+        queue.send(std::move(message));
+    }
+
+    EXPECT_EQ(3, queue.receive());
+    EXPECT_EQ(4, queue.receive());
+    EXPECT_EQ(5, queue.receive());
+    queue.unblock(); // don't wait the full receive timeout
     EXPECT_FALSE(queue.receive().has_value());
 }
 

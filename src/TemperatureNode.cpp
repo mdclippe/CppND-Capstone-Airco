@@ -1,18 +1,22 @@
 #include "TemperatureNode.h"
 
 void TemperatureNode::startSimulate(){
+    // already simulating : replacing the running thread would terminate the program
+    if (_running.exchange(true))
+    {
+        return;
+    }
     // send temperature values
-    _running = true;
     _messageQueue->clear();
    _simulationThread = std::make_unique<std::thread>(&TemperatureNode::cyclingTemperatures, this);
 }
 
 void TemperatureNode::stopSimulate()
 {
-    if (_running && _simulationThread != nullptr)
-    {
     _running = false;
-    _simulationThread->join();
+    if (_simulationThread != nullptr && _simulationThread->joinable())
+    {
+        _simulationThread->join();
     }
 }
 void TemperatureNode::cyclingTemperatures() {

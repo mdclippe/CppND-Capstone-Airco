@@ -7,11 +7,14 @@
 #include <atomic>
 #include <optional>
 #include <string>
+#include <cstddef>
 
 template <class T>
-class MessageQueue 
+class MessageQueue
 {
 public:
+    // capacity 0 means unbounded. When a bounded queue is full, send() drops the oldest message.
+    explicit MessageQueue(std::size_t capacity = 0) : _capacity(capacity) {}
     std::optional<T> receive();
     void send(T&& msg);
     void clear();
@@ -21,6 +24,7 @@ private:
     std::condition_variable _condition;
     std::mutex _mutex;
     std::queue<T> _queue;
+    std::size_t _capacity;
     std::atomic<bool> _unblock = false;
 };
 // explicitly instantiated in MessageQueue.cpp

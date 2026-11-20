@@ -10,7 +10,7 @@
 
 int main(int argc, char** argv)
 {
-    std::shared_ptr<MessageQueue<int>> msgQueue = std::make_shared<MessageQueue<int>>();    
+    std::shared_ptr<MessageQueue<int>> msgQueue = std::make_shared<MessageQueue<int>>(kTemperatureQueueCapacity);
     std::shared_ptr<TemperatureNode> node1 = std::make_shared<TemperatureNode>(msgQueue,1);
     
     std::shared_ptr<Airco> airco = std::make_shared<Airco>(msgQueue);

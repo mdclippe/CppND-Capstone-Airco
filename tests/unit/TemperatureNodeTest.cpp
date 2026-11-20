@@ -128,6 +128,17 @@ TEST_F(TemperatureNodeTest, StopSimulateStopsTheReadings)
     EXPECT_FALSE(queue->receive().has_value());
 }
 
+TEST_F(TemperatureNodeTest, StartingTwiceKeepsASingleSimulation)
+{
+    node.setValue(20);
+    node.onTargetTemperatureChange(40);
+
+    node.startSimulate();
+    node.startSimulate(); // used to replace the running (joinable) thread -> std::terminate
+
+    EXPECT_THAT(readings(4), ElementsAre(21, 22, 23, 24));
+}
+
 TEST_F(TemperatureNodeTest, StopSimulateWithoutStartIsHarmless)
 {
     node.stopSimulate();

@@ -93,7 +93,7 @@ protected:
     std::string shownStatus() const { return statusDisplay->toPlainText().toStdString(); }
 
     // MainWindow keeps references to these, so they must outlive the window
-    std::shared_ptr<MessageQueue<int>> msgQueue = std::make_shared<MessageQueue<int>>();
+    std::shared_ptr<MessageQueue<int>> msgQueue = std::make_shared<MessageQueue<int>>(kTemperatureQueueCapacity);
     std::shared_ptr<TemperatureNode> node1 = std::make_shared<TemperatureNode>(msgQueue, 1, 50ms);
     std::shared_ptr<Airco> airco = std::make_shared<Airco>(msgQueue);
     std::shared_ptr<Monitor> monitor = std::make_shared<Monitor>();

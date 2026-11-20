@@ -2,10 +2,30 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <type_traits>
+#include <utility>
 
+#include "AircoObserver.h"
 #include "Node.h"
 
+static_assert(std::has_virtual_destructor_v<Node>, "Node is used as a polymorphic base class");
+static_assert(std::has_virtual_destructor_v<AircoObserver>, "AircoObserver is used as a polymorphic base class");
+
 namespace {
+
+// Remembers that its destructor ran
+class TrackedNode : public Node
+{
+public:
+    TrackedNode(std::shared_ptr<MessageQueue<int>> queue, bool& destroyed)
+        : Node(std::move(queue), 1), _destroyed(destroyed) {}
+    ~TrackedNode() override { _destroyed = true; }
+    void startSimulate() override {}
+    void stopSimulate() override {}
+
+private:
+    bool& _destroyed;
+};
 
 class FakeNode : public Node
 {
@@ -64,4 +84,15 @@ TEST_F(NodeTest, SimulationIsDispatchedToTheConcreteNode)
 
     EXPECT_EQ(1, node.startCount);
     EXPECT_EQ(1, node.stopCount);
+}
+
+TEST(NodeLifetimeTest, DeletingThroughTheBaseClassRunsTheDerivedDestructor)
+{
+    bool destroyed = false;
+    std::unique_ptr<Node> node =
+        std::make_unique<TrackedNode>(std::make_shared<MessageQueue<int>>(), destroyed);
+
+    node.reset();
+
+    EXPECT_TRUE(destroyed);
 }

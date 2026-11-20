@@ -13,7 +13,7 @@ public:
     {
         _value = 0;
     };
-    ~Node();
+    virtual ~Node();
     
     int getID() {return _id;}
     void setName(const std::string& name) { this->_name = name;}

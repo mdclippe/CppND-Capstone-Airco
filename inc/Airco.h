@@ -13,6 +13,10 @@
 enum class AircoStates {OFF, COOLING, HEATING, STANDBY};
 enum class AircoModes {AUTO, MANUAL_HEAT, MANUAL_COOL};
 
+// Maximum number of unread temperature readings kept for the airco.
+// While the airco is switched off nobody reads them, the oldest ones are dropped.
+inline constexpr std::size_t kTemperatureQueueCapacity = 10;
+
 class Airco {
 public :
     explicit Airco(std::shared_ptr<MessageQueue<int>> messageQueue) : 

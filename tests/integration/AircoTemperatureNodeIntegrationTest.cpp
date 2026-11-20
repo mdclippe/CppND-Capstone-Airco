@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "Airco.h"
 #include "TemperatureNode.h"
@@ -156,4 +157,29 @@ TEST_F(AircoTemperatureNodeIntegrationTest, PowerOffWhileHeatingStopsTheAircoImm
     EXPECT_EQ(AircoStates::OFF, airco.getCurrentState());
     EXPECT_EQ(std::string("OFF"), recorder->lastStatus());
     EXPECT_EQ(readingsAtPowerOff, recorder->currentTemperatures().size());
+}
+
+// Wired like main.cpp: a bounded temperature queue between node and airco
+TEST(AircoTemperatureQueueIntegrationTest, ReadingsDoNotPileUpWhileTheAircoIsOff)
+{
+    auto queue = std::make_shared<MessageQueue<int>>(kTemperatureQueueCapacity);
+    auto node = std::make_shared<TemperatureNode>(queue, 1, 2ms);
+    Airco airco{queue}; // switched off: nobody reads the queue
+    airco.addObserver(node);
+    airco.setTargetTemperature(100); // the room keeps warming up during the test
+    node->setValue(20);
+    const int manyReadings = 3 * static_cast<int>(kTemperatureQueueCapacity);
+
+    node->startSimulate();
+    ASSERT_TRUE(waitUntil([&] { return node->getValue() >= 20 + manyReadings; }));
+    node->stopSimulate();
+
+    std::vector<int> waiting;
+    queue->unblock(); // the last receive returns at once when the queue is empty
+    while (auto reading = queue->receive())
+    {
+        waiting.push_back(*reading);
+    }
+    ASSERT_EQ(kTemperatureQueueCapacity, waiting.size());
+    EXPECT_EQ(node->getValue(), waiting.back()) << "the newest reading is kept";
 }
