@@ -4,6 +4,7 @@
 // display (the Qt Monitor), so these tests run without a GUI.
 #include <gmock/gmock.h>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -18,9 +19,7 @@ using namespace std::chrono_literals;
 using airco_test::RecordingObserver;
 using airco_test::waitUntil;
 using airco_test::withoutRepeats;
-using ::testing::Contains;
 using ::testing::ElementsAre;
-using ::testing::Not;
 
 namespace {
 
@@ -68,6 +67,18 @@ protected:
     {
         return waitUntil([&] { return display->lastStatus() == status; }, kScenarioTimeout);
     }
+    // the next `readings` readings the display gets all show `temperature`
+    bool roomStaysAt(int temperature, size_t readings)
+    {
+        const auto before = display->currentTemperatures().size();
+        if (!waitUntil([&] { return display->currentTemperatures().size() >= before + readings; },
+                       kScenarioTimeout))
+        {
+            return false;
+        }
+        const auto all = display->currentTemperatures();
+        return std::all_of(all.begin() + before, all.end(), [&](int t) { return t == temperature; });
+    }
 
     std::shared_ptr<MessageQueue<int>> msgQueue = std::make_shared<MessageQueue<int>>(kTemperatureQueueCapacity);
     std::shared_ptr<TemperatureNode> node1 = std::make_shared<TemperatureNode>(msgQueue, 1);
@@ -112,14 +123,11 @@ TEST_F(AircoSystemTest, InHeatModeTheAircoOnlyHeats)
     startSimulation();
     ASSERT_TRUE(displayShowsTemperature(20));
 
-    setTarget(19); // too warm: heat mode must not cool
-    ASSERT_TRUE(displayShows("STANDBY", 19));
-    EXPECT_THAT(display->statuses(), Not(Contains("COOLING")));
+    setTarget(18); // too warm: heat mode must not cool, so the room keeps its temperature
+    EXPECT_TRUE(roomStaysAt(20, 2));
+    EXPECT_THAT(display->statuses(), ElementsAre("STANDBY"));
 
-    // too cold: heat mode heats. Two degrees, because the next reading already
-    // moves one degree towards the target and with one degree the airco would
-    // never see the room as too cold.
-    setTarget(21);
+    setTarget(21); // too cold: heat mode heats
     ASSERT_TRUE(displayShowsStatus("HEATING"));
     ASSERT_TRUE(displayShows("STANDBY", 21));
     EXPECT_THAT(display->statuses(), ElementsAre("STANDBY", "HEATING", "STANDBY"));
@@ -132,17 +140,17 @@ TEST_F(AircoSystemTest, InCoolModeTheAircoOnlyCools)
     startSimulation();
     ASSERT_TRUE(displayShowsTemperature(20));
 
-    setTarget(21); // too cold: cool mode must not heat
-    ASSERT_TRUE(displayShows("STANDBY", 21));
-    EXPECT_THAT(display->statuses(), Not(Contains("HEATING")));
+    setTarget(22); // too cold: cool mode must not heat, so the room keeps its temperature
+    EXPECT_TRUE(roomStaysAt(20, 2));
+    EXPECT_THAT(display->statuses(), ElementsAre("STANDBY"));
 
-    setTarget(19); // too warm: cool mode cools (two degrees, see InHeatModeTheAircoOnlyHeats)
+    setTarget(19); // too warm: cool mode cools
     ASSERT_TRUE(displayShowsStatus("COOLING"));
     ASSERT_TRUE(displayShows("STANDBY", 19));
     EXPECT_THAT(display->statuses(), ElementsAre("STANDBY", "COOLING", "STANDBY"));
 }
 
-TEST_F(AircoSystemTest, SwitchingOffStopsTheAircoWhileTheRoomKeepsChanging)
+TEST_F(AircoSystemTest, SwitchingOffStopsTheAircoAndTheRoomWarming)
 {
     pressPower();
     startSimulation();
@@ -151,14 +159,15 @@ TEST_F(AircoSystemTest, SwitchingOffStopsTheAircoWhileTheRoomKeepsChanging)
 
     pressPower();
     const auto readingsAtPowerOff = display->currentTemperatures().size();
+    std::this_thread::sleep_for(200ms); // a simulation step that already started may still finish
     const int roomAtPowerOff = node1->getValue();
-    std::this_thread::sleep_for(1500ms);
+    std::this_thread::sleep_for(2500ms);
 
     EXPECT_EQ(AircoStates::OFF, airco->getCurrentState());
     EXPECT_EQ(std::string("OFF"), display->lastStatus());
     EXPECT_EQ(readingsAtPowerOff, display->currentTemperatures().size())
         << "a switched-off airco must not handle readings";
-    EXPECT_GT(node1->getValue(), roomAtPowerOff) << "the simulated room keeps warming up";
+    EXPECT_EQ(roomAtPowerOff, node1->getValue()) << "without the airco the room keeps its temperature";
 }
 
 TEST(AircoApplicationShutdownTest, ShutsDownCleanlyWhileEverythingIsRunning)

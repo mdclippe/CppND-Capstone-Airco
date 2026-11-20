@@ -1,5 +1,7 @@
 // Integration tests: Airco + TemperatureNode + MessageQueue working together,
 // wired like main.cpp but with a fast simulation step.
+// The simulated room follows the airco: it warms up while HEATING, cools down
+// while COOLING and keeps its temperature in STANDBY / OFF.
 #include <gmock/gmock.h>
 
 #include <chrono>
@@ -22,7 +24,9 @@ using ::testing::Not;
 
 namespace {
 
-constexpr auto kStep = 20ms;
+// Slower than in the unit tests: the airco must have handled a reading (and
+// told the node to stop heating) before the node takes its next step.
+constexpr auto kStep = 50ms;
 
 class AircoTemperatureNodeIntegrationTest : public ::testing::Test
 {
@@ -30,7 +34,7 @@ protected:
     void SetUp() override
     {
         airco.addObserver(recorder);
-        airco.addObserver(node);   // the node follows the target, like in main.cpp
+        airco.addObserver(node);   // the room follows the airco status, like in main.cpp
         airco.setTargetTemperature(20);
         node->setValue(20);
     }
@@ -45,10 +49,24 @@ protected:
         });
     }
 
+    bool waitForReadings(size_t count)
+    {
+        return waitUntil([&] { return recorder->currentTemperatures().size() >= count; });
+    }
+
     bool switchMode(const std::string& event, AircoModes expected)
     {
         airco.handleEvent(event);
         return waitUntil([&] { return airco.getMode() == expected; });
+    }
+
+    // true when the simulated room temperature no longer changes
+    bool roomTemperatureIsStable()
+    {
+        std::this_thread::sleep_for(2 * kStep); // a step that already started may still finish
+        const int settled = node->getValue();
+        std::this_thread::sleep_for(5 * kStep);
+        return node->getValue() == settled;
     }
 
     std::shared_ptr<MessageQueue<int>> queue = std::make_shared<MessageQueue<int>>();
@@ -59,13 +77,14 @@ protected:
 
 } // namespace
 
-TEST_F(AircoTemperatureNodeIntegrationTest, NewTargetIsForwardedToTheTemperatureNode)
+TEST_F(AircoTemperatureNodeIntegrationTest, RoomDoesNotChangeWhileTheAircoIsOff)
 {
     node->startSimulate();
 
     airco.setTargetTemperature(23);
 
-    EXPECT_TRUE(waitUntil([&] { return node->getValue() == 23; }));
+    EXPECT_TRUE(roomTemperatureIsStable());
+    EXPECT_EQ(20, node->getValue());
 }
 
 TEST_F(AircoTemperatureNodeIntegrationTest, AutoModeHeatsUntilTheRoomReachesTheTarget)
@@ -77,7 +96,8 @@ TEST_F(AircoTemperatureNodeIntegrationTest, AutoModeHeatsUntilTheRoomReachesTheT
 
     ASSERT_TRUE(waitForStateAt(AircoStates::STANDBY, 23));
     EXPECT_THAT(recorder->statuses(), ElementsAre("STANDBY", "HEATING", "STANDBY"));
-    EXPECT_THAT(withoutRepeats(recorder->currentTemperatures()), ElementsAre(21, 22, 23));
+    EXPECT_THAT(withoutRepeats(recorder->currentTemperatures()), ElementsAre(20, 21, 22, 23));
+    EXPECT_TRUE(roomTemperatureIsStable());
 }
 
 TEST_F(AircoTemperatureNodeIntegrationTest, AutoModeCoolsUntilTheRoomReachesTheTarget)
@@ -89,34 +109,61 @@ TEST_F(AircoTemperatureNodeIntegrationTest, AutoModeCoolsUntilTheRoomReachesTheT
 
     ASSERT_TRUE(waitForStateAt(AircoStates::STANDBY, 18));
     EXPECT_THAT(recorder->statuses(), ElementsAre("STANDBY", "COOLING", "STANDBY"));
-    EXPECT_THAT(withoutRepeats(recorder->currentTemperatures()), ElementsAre(19, 18));
+    EXPECT_THAT(withoutRepeats(recorder->currentTemperatures()), ElementsAre(20, 19, 18));
+    EXPECT_TRUE(roomTemperatureIsStable());
 }
 
-TEST_F(AircoTemperatureNodeIntegrationTest, ManualHeatModeNeverCoolsAWarmRoom)
+TEST_F(AircoTemperatureNodeIntegrationTest, ManualHeatModeDoesNotCoolAWarmRoom)
 {
     ASSERT_TRUE(switchMode("heating_requested", AircoModes::MANUAL_HEAT));
     airco.togglePower();
-    airco.setTargetTemperature(18);
+    airco.setTargetTemperature(18); // below the room temperature
 
-    node->startSimulate(); // the simulation still drifts towards the target
+    node->startSimulate();
 
-    ASSERT_TRUE(waitForStateAt(AircoStates::STANDBY, 18));
+    ASSERT_TRUE(waitForReadings(5));
+    EXPECT_THAT(withoutRepeats(recorder->currentTemperatures()), ElementsAre(20));
     EXPECT_THAT(recorder->statuses(), ElementsAre("STANDBY"));
 }
 
-TEST_F(AircoTemperatureNodeIntegrationTest, ManualCoolModeNeverHeatsAColdRoom)
+TEST_F(AircoTemperatureNodeIntegrationTest, ManualHeatModeHeatsAColdRoom)
 {
-    ASSERT_TRUE(switchMode("cooling_requested", AircoModes::MANUAL_COOL));
+    ASSERT_TRUE(switchMode("heating_requested", AircoModes::MANUAL_HEAT));
     airco.togglePower();
     airco.setTargetTemperature(22);
 
     node->startSimulate();
 
     ASSERT_TRUE(waitForStateAt(AircoStates::STANDBY, 22));
+    EXPECT_THAT(recorder->statuses(), ElementsAre("STANDBY", "HEATING", "STANDBY"));
+}
+
+TEST_F(AircoTemperatureNodeIntegrationTest, ManualCoolModeDoesNotHeatAColdRoom)
+{
+    ASSERT_TRUE(switchMode("cooling_requested", AircoModes::MANUAL_COOL));
+    airco.togglePower();
+    airco.setTargetTemperature(22); // above the room temperature
+
+    node->startSimulate();
+
+    ASSERT_TRUE(waitForReadings(5));
+    EXPECT_THAT(withoutRepeats(recorder->currentTemperatures()), ElementsAre(20));
     EXPECT_THAT(recorder->statuses(), ElementsAre("STANDBY"));
 }
 
-TEST_F(AircoTemperatureNodeIntegrationTest, SwitchingModeWhileHeatingStopsTheHeating)
+TEST_F(AircoTemperatureNodeIntegrationTest, ManualCoolModeCoolsAWarmRoom)
+{
+    ASSERT_TRUE(switchMode("cooling_requested", AircoModes::MANUAL_COOL));
+    airco.togglePower();
+    airco.setTargetTemperature(18);
+
+    node->startSimulate();
+
+    ASSERT_TRUE(waitForStateAt(AircoStates::STANDBY, 18));
+    EXPECT_THAT(recorder->statuses(), ElementsAre("STANDBY", "COOLING", "STANDBY"));
+}
+
+TEST_F(AircoTemperatureNodeIntegrationTest, SwitchingToCoolModeWhileHeatingStopsWarmingTheRoom)
 {
     airco.togglePower();
     airco.setTargetTemperature(35); // far away, the room keeps warming during the test
@@ -126,6 +173,7 @@ TEST_F(AircoTemperatureNodeIntegrationTest, SwitchingModeWhileHeatingStopsTheHea
     ASSERT_TRUE(switchMode("cooling_requested", AircoModes::MANUAL_COOL));
 
     EXPECT_TRUE(waitUntil([&] { return airco.getCurrentState() == AircoStates::STANDBY; }));
+    EXPECT_TRUE(roomTemperatureIsStable());
     EXPECT_THAT(recorder->statuses(), Not(Contains("COOLING")));
 }
 
@@ -143,7 +191,7 @@ TEST_F(AircoTemperatureNodeIntegrationTest, ReadingsAreOnlyHandledWhileTheAircoI
     EXPECT_EQ(AircoStates::STANDBY, airco.getCurrentState());
 }
 
-TEST_F(AircoTemperatureNodeIntegrationTest, PowerOffWhileHeatingStopsTheAircoImmediately)
+TEST_F(AircoTemperatureNodeIntegrationTest, PowerOffWhileHeatingStopsTheAircoAndTheRoomWarming)
 {
     airco.togglePower();
     airco.setTargetTemperature(35);
@@ -152,11 +200,12 @@ TEST_F(AircoTemperatureNodeIntegrationTest, PowerOffWhileHeatingStopsTheAircoImm
 
     airco.togglePower();
     const auto readingsAtPowerOff = recorder->currentTemperatures().size();
-    std::this_thread::sleep_for(5 * kStep); // the simulation keeps running
 
+    EXPECT_TRUE(roomTemperatureIsStable());
     EXPECT_EQ(AircoStates::OFF, airco.getCurrentState());
     EXPECT_EQ(std::string("OFF"), recorder->lastStatus());
-    EXPECT_EQ(readingsAtPowerOff, recorder->currentTemperatures().size());
+    EXPECT_EQ(readingsAtPowerOff, recorder->currentTemperatures().size())
+        << "a switched-off airco must not handle readings";
 }
 
 // Wired like main.cpp: a bounded temperature queue between node and airco
@@ -166,12 +215,11 @@ TEST(AircoTemperatureQueueIntegrationTest, ReadingsDoNotPileUpWhileTheAircoIsOff
     auto node = std::make_shared<TemperatureNode>(queue, 1, 2ms);
     Airco airco{queue}; // switched off: nobody reads the queue
     airco.addObserver(node);
-    airco.setTargetTemperature(100); // the room keeps warming up during the test
     node->setValue(20);
-    const int manyReadings = 3 * static_cast<int>(kTemperatureQueueCapacity);
 
     node->startSimulate();
-    ASSERT_TRUE(waitUntil([&] { return node->getValue() >= 20 + manyReadings; }));
+    // far more readings than the capacity, even with a coarse (~15 ms) sleep timer
+    std::this_thread::sleep_for(500ms);
     node->stopSimulate();
 
     std::vector<int> waiting;
@@ -180,6 +228,5 @@ TEST(AircoTemperatureQueueIntegrationTest, ReadingsDoNotPileUpWhileTheAircoIsOff
     {
         waiting.push_back(*reading);
     }
-    ASSERT_EQ(kTemperatureQueueCapacity, waiting.size());
-    EXPECT_EQ(node->getValue(), waiting.back()) << "the newest reading is kept";
+    EXPECT_EQ(kTemperatureQueueCapacity, waiting.size());
 }

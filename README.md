@@ -10,7 +10,7 @@ A number of threads are handling things :
 * a thread handling possible events
 * a thread handling the states of the airconditioner itself
 
-I have also implemented an observer pattern so that the temperaturenode somewhat simulates the wanted temperature (please note that this is not 100% accurate, but for this purpose i think it will do).
+I have also implemented an observer pattern so that the temperaturenode simulates the room : it observes the status of the airco and warms up while the airco is heating, cools down while it is cooling and keeps its temperature otherwise.
 
 You can have 3 different modes : auto, manual heating and manual cooling.
 
@@ -42,6 +42,37 @@ CMake options:
 
 * `-DAIRCO_BUILD_GUI=OFF` : build without Qt (only the airco logic and the tests)
 * `-DAIRCO_BUILD_TESTS=OFF` : do not build the tests (GoogleTest is downloaded at configure time)
+* `-DAIRCO_WITH_MQTT=OFF` : build without MQTT support (see below)
+
+## MQTT
+
+The airco can be connected to an MQTT broker (e.g. [Mosquitto](https://mosquitto.org/)) with the
+[Eclipse Paho MQTT C++](https://github.com/eclipse-paho/paho.mqtt.cpp) library.
+If Paho is installed (Ubuntu: `sudo apt install libpaho-mqttpp-dev`) CMake uses it, otherwise
+Paho C++ v1.6.0 and the Paho C library are downloaded and built together with the project.
+
+At start-up the application connects to the broker in `AIRCO_MQTT_BROKER` (default `tcp://localhost:1883`).
+Without a reachable broker it simply runs without MQTT.
+The topics start with `AIRCO_MQTT_TOPIC_PREFIX` (default `airco`):
+
+| Topic | Direction | Payload |
+| --- | --- | --- |
+| `airco/sensor/temperature` | in | a temperature reading, e.g. `21` or `21.4` (rounded); other payloads are ignored |
+| `airco/status` | out, retained | `OFF`, `STANDBY`, `HEATING` or `COOLING` |
+| `airco/target_temperature` | out, retained | the target temperature, e.g. `22` |
+| `airco/current_temperature` | out, retained | the last reading used by the airco |
+
+Readings from MQTT go to the same message queue as the simulated `TemperatureNode`, so any sensor on the network can drive the airco.
+`AircoMqttBridge` does this in the same way `Monitor` connects the airco to Qt: it is an `AircoObserver`.
+It only knows the small `MqttClient` interface; `PahoMqttClient` implements it with Paho, which keeps the airco logic testable without a broker.
+
+Try it with a local broker:
+
+```sh
+docker run -it -p 1883:1883 eclipse-mosquitto mosquitto -c /mosquitto-no-auth.conf
+mosquitto_sub -t 'airco/#' -v                         # follow the airco
+mosquitto_pub -t airco/sensor/temperature -m 17.5     # send a temperature reading
+```
 
 ## Testing
 
@@ -49,9 +80,9 @@ The tests use [GoogleTest / GoogleMock](https://github.com/google/googletest) (v
 
 | Folder | Executable | What is tested |
 | --- | --- | --- |
-| `tests/unit` | `airco_unit_tests` | one class at a time: `MessageQueue`, `Node`, `TemperatureNode`, `Airco` (with mocked observers) and `Monitor` (Qt only) |
-| `tests/integration` | `airco_integration_tests` | `Airco` + `TemperatureNode` + `MessageQueue` working together (fast simulation step), `Airco` -> `Monitor` Qt signals (Qt only) |
-| `tests/system` | `airco_system_tests` | the complete application wired like `main.cpp` with production timing, driven through user scenarios, and the real `MainWindow` driven through its buttons and slider (Qt only) |
+| `tests/unit` | `airco_unit_tests` | one class at a time: `MessageQueue`, `Node`, `TemperatureNode`, `Airco` (with mocked observers), `AircoMqttBridge` (with a mocked MQTT client) and `Monitor` (Qt only) |
+| `tests/integration` | `airco_integration_tests` | `Airco` + `TemperatureNode` + `MessageQueue` working together (fast simulation step), `Airco` + `AircoMqttBridge` with an in-memory broker, `PahoMqttClient` (MQTT only), `Airco` -> `Monitor` Qt signals (Qt only) |
+| `tests/system` | `airco_system_tests` | the complete application wired like `main.cpp` with production timing, driven through user scenarios, through a real MQTT broker (MQTT only) and through the real `MainWindow` buttons and slider (Qt only) |
 
 Build and run all tests:
 
@@ -62,27 +93,64 @@ make
 ctest --output-on-failure
 ```
 
+Or with the CMake presets (build directory `build/<preset>`):
+
+```sh
+cmake --preset no-gui            # Windows + MSVC: msvc-no-gui, with Qt: default
+cmake --build --preset no-gui
+ctest --preset no-gui
+```
+
+For your own Qt location, add a `CMakeUserPresets.json` (not committed), e.g.:
+
+```json
+{
+    "version": 3,
+    "configurePresets": [
+        { "name": "my-qt", "inherits": "default",
+          "cacheVariables": { "CMAKE_PREFIX_PATH": "/home/me/Qt/6.5.2/gcc_64" } }
+    ]
+}
+```
+
+On Windows the Qt online installer installs Qt for MinGW, which needs the MinGW compiler that comes with it
+(MSVC cannot use those Qt libraries). A matching `CMakeUserPresets.json` preset:
+
+```json
+{ "name": "mingw-qt", "inherits": "default", "generator": "Ninja",
+  "cmakeExecutable": "C:/Qt/Tools/CMake_64/bin/cmake.exe",
+  "environment": { "PATH": "C:/Qt/Tools/mingw1310_64/bin;C:/Qt/Tools/Ninja;$penv{PATH}" },
+  "cacheVariables": { "CMAKE_PREFIX_PATH": "C:/Qt/6.12.0/mingw_64",
+                      "CMAKE_C_COMPILER": "gcc", "CMAKE_CXX_COMPILER": "g++" } }
+```
+
+On Windows the build copies the Qt DLLs next to the executables (`windeployqt`), so the app and the tests
+also start outside Qt Creator.
+
+In VS Code (CMake Tools + C++ TestMate): choose a configure preset when CMake Tools asks
+(or `CMake: Select Configure Preset`), build with `CMake: Build` (F7) and the tests
+appear in the Testing view, where they can be run and debugged one by one.
+
 Run one category: `ctest -L unit`, `ctest -L integration` or `ctest -L system`.
 The executables can also be started directly, e.g. `./tests/airco_unit_tests --gtest_filter=AircoTest.*`.
 
 The system tests use the real one-degree-per-second simulation, so they take a few seconds each.
 The GUI system tests run on the Qt `offscreen` platform on Linux/macOS (override with `QT_QPA_PLATFORM`).
 `TemperatureNode` takes an optional step interval (default 1 second) so the unit and integration tests can simulate faster.
+The tests that need a real MQTT broker use `AIRCO_TEST_MQTT_BROKER` (default `tcp://localhost:1883`) and are reported as skipped when no broker is reachable.
 
 ## Usage
 * AUTO mode
 - Turn on the Airco
-- turn on the temperature simulation (this will increase or decrease to the target temperature)
+- turn on the temperature simulation (the room warms up one degree per second while the Airco is heating, cools down while it is cooling and keeps its temperature in standby or when the Airco is off)
 - changing the target temperature will modify the state to heating or cooling 
 - if the target temperature is reached, the Airco will go to Standby
 
 * HEATING mode
-This will only heat when required
-Note : in this mode the temperature simulation will still go towards the set target temperature
+This will only heat when required : with a target below the room temperature the Airco stays in standby and the simulated room keeps its temperature
 
 * COOLING mode
-This will only cool when required
-Note : in this mode the temperature simulation will still go towards the set target temperature
+This will only cool when required : with a target above the room temperature the Airco stays in standby and the simulated room keeps its temperature
 
 ## Rubric Points
 1. Object oriented programming

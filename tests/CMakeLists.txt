@@ -27,18 +27,20 @@ set(CMAKE_AUTORCC OFF)
 #     LABEL <unit|integration|system>
 #     SOURCES <files...>                 tests that only need airco_core
 #     [QT_SOURCES <files...>]            tests that need Qt (only built with AIRCO_BUILD_GUI)
+#     [MQTT_SOURCES <files...>]          tests that need Paho MQTT (only built with AIRCO_WITH_MQTT)
 #     [NEEDS_QAPPLICATION])              create a QApplication in main()
 #
 # Every GoogleTest test case becomes a separate CTest test carrying LABEL,
 # so a category can be run with `ctest -L <label>`.
 # ---------------------------------------------------------------------------
 function(airco_add_test_suite target)
-    cmake_parse_arguments(ARG "NEEDS_QAPPLICATION" "LABEL" "SOURCES;QT_SOURCES" ${ARGN})
+    cmake_parse_arguments(ARG "NEEDS_QAPPLICATION" "LABEL" "SOURCES;QT_SOURCES;MQTT_SOURCES" ${ARGN})
 
     add_executable(${target}
         ${ARG_SOURCES}
         support/test_main.cpp
         support/TestHelpers.h
+        support/FakeMqtt.h
     )
     target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/support)
     target_link_libraries(${target} PRIVATE airco_core GTest::gmock)
@@ -52,16 +54,19 @@ function(airco_add_test_suite target)
         if(ARG_NEEDS_QAPPLICATION)
             target_compile_definitions(${target} PRIVATE AIRCO_TESTS_NEED_QAPPLICATION)
         endif()
-        # Windows: put the Qt DLLs and plugins next to the test executable,
-        # it has to run at build time for the test discovery.
-        if(WIN32 AND TARGET Qt${QT_VERSION_MAJOR}::windeployqt)
-            add_custom_command(TARGET ${target} POST_BUILD
-                COMMAND Qt${QT_VERSION_MAJOR}::windeployqt
-                        --no-translations --no-compiler-runtime --verbose 0
-                        $<TARGET_FILE:${target}>
-                VERBATIM
-            )
+        # GUI tests run headless where the offscreen platform plugin is available
+        # (always on Linux/macOS, deployed by windeployqt on Windows with Qt >= 6.5)
+        if(NOT WIN32 OR QT_VERSION VERSION_GREATER_EQUAL 6.5)
+            target_compile_definitions(${target} PRIVATE AIRCO_TESTS_QT_OFFSCREEN)
         endif()
+        # Windows: the test executable runs at build time for the test discovery,
+        # so it needs the Qt DLLs next to it (must come before gtest_discover_tests)
+        airco_deploy_qt(${target} OFFSCREEN)
+    endif()
+
+    if(AIRCO_WITH_MQTT AND ARG_MQTT_SOURCES)
+        target_sources(${target} PRIVATE ${ARG_MQTT_SOURCES} support/MqttBrokerTestSupport.h)
+        target_link_libraries(${target} PRIVATE airco_mqtt)
     endif()
 
     gtest_discover_tests(${target}
@@ -80,6 +85,7 @@ airco_add_test_suite(airco_unit_tests
         unit/NodeTest.cpp
         unit/TemperatureNodeTest.cpp
         unit/AircoTest.cpp
+        unit/AircoMqttBridgeTest.cpp
     QT_SOURCES
         unit/MonitorTest.cpp
 )
@@ -91,8 +97,11 @@ airco_add_test_suite(airco_integration_tests
     LABEL integration
     SOURCES
         integration/AircoTemperatureNodeIntegrationTest.cpp
+        integration/AircoMqttIntegrationTest.cpp
     QT_SOURCES
         integration/AircoMonitorIntegrationTest.cpp
+    MQTT_SOURCES
+        integration/PahoMqttClientIntegrationTest.cpp
 )
 
 # ---------------------------------------------------------------------------
@@ -105,5 +114,7 @@ airco_add_test_suite(airco_system_tests
         system/AircoSystemTest.cpp
     QT_SOURCES
         system/MainWindowSystemTest.cpp
+    MQTT_SOURCES
+        system/AircoMqttSystemTest.cpp
     NEEDS_QAPPLICATION
 )

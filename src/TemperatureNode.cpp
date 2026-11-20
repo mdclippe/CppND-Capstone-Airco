@@ -19,18 +19,28 @@ void TemperatureNode::stopSimulate()
         _simulationThread->join();
     }
 }
+void TemperatureNode::onStatusChange(std::string& newStatus)
+{
+    if (newStatus == "HEATING")
+    {
+        _change = 1;
+    }
+    else if (newStatus == "COOLING")
+    {
+        _change = -1;
+    }
+    else
+    {
+        // STANDBY or OFF : nothing changes the room temperature
+        _change = 0;
+    }
+}
+
 void TemperatureNode::cyclingTemperatures() {
     while (_running)
     {
-        // startSimulate heating and cooling
-        if (getValue() < _newTargetTemperature)
-        {
-            setValue(getValue()+1);
-        }
-        else if (getValue() > _newTargetTemperature)
-        {
-            setValue(getValue()-1);
-        }
+        // the room warms up or cools down only when the airco heats or cools
+        setValue(getValue() + _change);
         _messageQueue->send(std::move(this->getValue()));
         std::this_thread::sleep_for(_stepInterval);
     }

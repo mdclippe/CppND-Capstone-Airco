@@ -11,9 +11,8 @@ int main(int argc, char** argv)
     ::testing::InitGoogleMock(&argc, argv);
 
 #ifdef AIRCO_TESTS_NEED_QAPPLICATION
-#ifndef _WIN32
-    // GUI tests run headless unless a platform is chosen explicitly.
-    // (On Windows windeployqt only ships the native platform plugin.)
+#ifdef AIRCO_TESTS_QT_OFFSCREEN
+    // GUI tests run headless unless a platform is chosen explicitly
     if (!qEnvironmentVariableIsSet("QT_QPA_PLATFORM"))
     {
         qputenv("QT_QPA_PLATFORM", "offscreen");

@@ -65,5 +65,15 @@
         "hash_map": "cpp",
         "forward_list": "cpp"
     },
-    "C_Cpp.errorSquiggles": "disabled"
+    "C_Cpp.errorSquiggles": "disabled",
+
+    // CMake Tools: configure / build with CMakePresets.json
+    "cmake.useCMakePresets": "always",
+    // The tests are shown by C++ TestMate (GoogleTest tree, jump to source,
+    // inline failures); without this CMake Tools would list every test a second time.
+    "cmake.ctest.testExplorerIntegrationEnabled": false,
+    "testMate.cpp.test.advancedExecutables": [
+        { "pattern": "build/**/airco_*_tests.exe" },
+        { "pattern": "build/**/airco_*_tests" }
+    ]
 }

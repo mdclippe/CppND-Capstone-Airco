@@ -3,6 +3,8 @@
 
 #include <chrono>
 #include <memory>
+#include <string>
+#include <thread>
 #include <vector>
 
 #include "TemperatureNode.h"
@@ -22,6 +24,13 @@ class TemperatureNodeTest : public ::testing::Test
 {
 protected:
     void TearDown() override { node.stopSimulate(); }
+
+    // the airco notifies its observers (like the node) of every status change
+    void aircoReports(const char* status)
+    {
+        std::string text = status;
+        node.onStatusChange(text);
+    }
 
     // Waits for `count` readings sent by the node to the queue
     std::vector<int> readings(size_t count)
@@ -59,54 +68,69 @@ TEST_F(TemperatureNodeTest, SendsNothingBeforeSimulationStarts)
     EXPECT_FALSE(queue->receive().has_value());
 }
 
-TEST_F(TemperatureNodeTest, RisesOneDegreePerStepUntilTargetIsReached)
+TEST_F(TemperatureNodeTest, RoomStaysTheSameAsLongAsTheAircoDoesNothing)
 {
     node.setValue(20);
-    node.onTargetTemperatureChange(23);
-
-    node.startSimulate();
-
-    EXPECT_THAT(readings(5), ElementsAre(21, 22, 23, 23, 23));
-}
-
-TEST_F(TemperatureNodeTest, DropsOneDegreePerStepUntilTargetIsReached)
-{
-    node.setValue(20);
-    node.onTargetTemperatureChange(18);
-
-    node.startSimulate();
-
-    EXPECT_THAT(readings(4), ElementsAre(19, 18, 18, 18));
-}
-
-TEST_F(TemperatureNodeTest, HoldsTheTemperatureWhenAlreadyOnTarget)
-{
-    node.setValue(20);
-    node.onTargetTemperatureChange(20);
 
     node.startSimulate();
 
     EXPECT_THAT(readings(3), ElementsAre(20, 20, 20));
-    EXPECT_EQ(20, node.getValue());
 }
 
-TEST_F(TemperatureNodeTest, FollowsATargetThatChangesDuringSimulation)
+TEST_F(TemperatureNodeTest, WarmsUpOneDegreePerStepWhileTheAircoHeats)
 {
     node.setValue(20);
-    node.onTargetTemperatureChange(22);
+    aircoReports("HEATING");
+
     node.startSimulate();
-    ASSERT_TRUE(waitUntil([&] { return node.getValue() == 22; }));
 
-    node.onTargetTemperatureChange(19);
+    EXPECT_THAT(readings(3), ElementsAre(21, 22, 23));
+}
 
-    EXPECT_TRUE(waitUntil([&] { return node.getValue() == 19; }));
+TEST_F(TemperatureNodeTest, CoolsDownOneDegreePerStepWhileTheAircoCools)
+{
+    node.setValue(20);
+    aircoReports("COOLING");
+
+    node.startSimulate();
+
+    EXPECT_THAT(readings(3), ElementsAre(19, 18, 17));
+}
+
+TEST_F(TemperatureNodeTest, TargetTemperatureAloneDoesNotChangeTheRoom)
+{
+    // e.g. HEAT mode with a target below the room temperature: the airco is in standby
+    node.setValue(20);
+    node.onTargetTemperatureChange(15);
+    aircoReports("STANDBY");
+
+    node.startSimulate();
+
+    EXPECT_THAT(readings(3), ElementsAre(20, 20, 20));
+}
+
+TEST_F(TemperatureNodeTest, FollowsTheAircoWhileSimulating)
+{
+    node.setValue(20);
+    node.startSimulate();
+
+    aircoReports("HEATING");
+    ASSERT_TRUE(waitUntil([&] { return node.getValue() >= 22; }));
+
+    aircoReports("COOLING");
+    ASSERT_TRUE(waitUntil([&] { return node.getValue() <= 19; }));
+
+    aircoReports("STANDBY");
+    std::this_thread::sleep_for(2 * kStep); // a step that already started may still finish
+    const int settled = node.getValue();
+    std::this_thread::sleep_for(5 * kStep);
+    EXPECT_EQ(settled, node.getValue());
 }
 
 TEST_F(TemperatureNodeTest, StartSimulateDiscardsOldQueueContent)
 {
     queue->send(99);
     node.setValue(20);
-    node.onTargetTemperatureChange(20);
 
     node.startSimulate();
 
@@ -116,7 +140,6 @@ TEST_F(TemperatureNodeTest, StartSimulateDiscardsOldQueueContent)
 TEST_F(TemperatureNodeTest, StopSimulateStopsTheReadings)
 {
     node.setValue(20);
-    node.onTargetTemperatureChange(20);
     node.startSimulate();
     ASSERT_TRUE(receiveWithin(*queue).has_value());
 
@@ -128,17 +151,6 @@ TEST_F(TemperatureNodeTest, StopSimulateStopsTheReadings)
     EXPECT_FALSE(queue->receive().has_value());
 }
 
-TEST_F(TemperatureNodeTest, StartingTwiceKeepsASingleSimulation)
-{
-    node.setValue(20);
-    node.onTargetTemperatureChange(40);
-
-    node.startSimulate();
-    node.startSimulate(); // used to replace the running (joinable) thread -> std::terminate
-
-    EXPECT_THAT(readings(4), ElementsAre(21, 22, 23, 24));
-}
-
 TEST_F(TemperatureNodeTest, StopSimulateWithoutStartIsHarmless)
 {
     node.stopSimulate();
@@ -146,10 +158,21 @@ TEST_F(TemperatureNodeTest, StopSimulateWithoutStartIsHarmless)
     SUCCEED();
 }
 
+TEST_F(TemperatureNodeTest, StartingTwiceKeepsASingleSimulation)
+{
+    node.setValue(20);
+    aircoReports("HEATING");
+
+    node.startSimulate();
+    node.startSimulate(); // used to replace the running (joinable) thread -> std::terminate
+
+    EXPECT_THAT(readings(4), ElementsAre(21, 22, 23, 24));
+}
+
 TEST_F(TemperatureNodeTest, CanBeRestartedAndContinuesFromItsLastValue)
 {
     node.setValue(20);
-    node.onTargetTemperatureChange(40); // far away, so the target is never reached here
+    aircoReports("HEATING");
     node.startSimulate();
     EXPECT_THAT(readings(2), ElementsAre(21, 22));
     node.stopSimulate();
@@ -161,6 +184,23 @@ TEST_F(TemperatureNodeTest, CanBeRestartedAndContinuesFromItsLastValue)
     ASSERT_TRUE(next.has_value());
     EXPECT_EQ(lastValue + 1, *next);
 }
+
+// STANDBY and OFF stop the temperature change
+class TemperatureNodeIdleStatusTest : public TemperatureNodeTest,
+                                      public ::testing::WithParamInterface<const char*> {};
+
+TEST_P(TemperatureNodeIdleStatusTest, KeepsTheRoomTemperature)
+{
+    node.setValue(20);
+    aircoReports("HEATING");
+    aircoReports(GetParam());
+
+    node.startSimulate();
+
+    EXPECT_THAT(readings(3), ElementsAre(20, 20, 20));
+}
+
+INSTANTIATE_TEST_SUITE_P(AircoStatus, TemperatureNodeIdleStatusTest, ::testing::Values("STANDBY", "OFF"));
 
 TEST(TemperatureNodeLifetimeTest, DestroyingASimulatingNodeStopsItsThread)
 {

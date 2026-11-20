@@ -4,10 +4,14 @@
 #include <atomic>
 #include <chrono>
 #include <iostream>
+#include <string>
 
 // for simulation purposes
 #include "AircoObserver.h"
 
+// Simulated room temperature sensor. The room follows what the airco does :
+// it warms up one degree per step while the airco is HEATING, cools down one
+// degree per step while it is COOLING and stays the same otherwise (STANDBY / OFF).
 class TemperatureNode : public Node, public AircoObserver {
 public :
     // stepInterval : time between two simulated temperature readings (tests use a shorter interval)
@@ -22,12 +26,11 @@ public :
     }
     void startSimulate() override;
     void stopSimulate() override;
-    void onTargetTemperatureChange(int newTargetTemperature) override {
-        _newTargetTemperature = newTargetTemperature;
-    };
+    void onStatusChange(std::string& newStatus) override;
 private:
     void cyclingTemperatures();
-    std::atomic<int> _newTargetTemperature{0};
+    // degrees per simulation step : +1 heating, -1 cooling, 0 otherwise
+    std::atomic<int> _change{0};
     std::chrono::milliseconds _stepInterval;
 };
 
