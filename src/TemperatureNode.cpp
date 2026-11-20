@@ -28,6 +28,6 @@ void TemperatureNode::cyclingTemperatures() {
             setValue(getValue()-1);
         }
         _messageQueue->send(std::move(this->getValue()));
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(_stepInterval);
     }
 }

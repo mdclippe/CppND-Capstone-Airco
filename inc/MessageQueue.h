@@ -6,6 +6,7 @@
 #include <queue>
 #include <atomic>
 #include <optional>
+#include <string>
 
 template <class T>
 class MessageQueue 
@@ -22,6 +23,7 @@ private:
     std::queue<T> _queue;
     std::atomic<bool> _unblock = false;
 };
-template class MessageQueue<int>;
-template class MessageQueue<std::string>;
+// explicitly instantiated in MessageQueue.cpp
+extern template class MessageQueue<int>;
+extern template class MessageQueue<std::string>;
 #endif

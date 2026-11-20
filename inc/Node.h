@@ -3,6 +3,8 @@
 #include <iostream>
 #include <thread>
 #include <atomic>
+#include <memory>
+#include <string>
 #include "MessageQueue.h"
 
 class Node {
@@ -29,7 +31,7 @@ protected:
 
 private:
     std::string _name;
-    int _value;
+    std::atomic<int> _value;
     int _id;
     
 };

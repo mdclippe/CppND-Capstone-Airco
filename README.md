@@ -18,7 +18,7 @@ In this project i have used QT for a very simple GUI just to get myself familiar
 
 
 ## Dependencies for Running Locally
-* cmake >= 3.7
+* cmake >= 3.16
   * All OSes: [click here for installation instructions](https://cmake.org/install/)
 * make >= 4.1 (Linux, Mac), 3.81 (Windows)
   * Linux: make is installed by default on most Linux distros
@@ -37,6 +37,37 @@ In this project i have used QT for a very simple GUI just to get myself familiar
 2. Make a build directory in the top level directory: `mkdir build && cd build`
 3. Compile: `cmake -DCMAKE_PREFIX_PATH="/path/to/Qt/6.5.2/gcc_64" .. && make`
 4. Run it: `./Airco`.
+
+CMake options:
+
+* `-DAIRCO_BUILD_GUI=OFF` : build without Qt (only the airco logic and the tests)
+* `-DAIRCO_BUILD_TESTS=OFF` : do not build the tests (GoogleTest is downloaded at configure time)
+
+## Testing
+
+The tests use [GoogleTest / GoogleMock](https://github.com/google/googletest) (v1.15.2, fetched by CMake) and live in `tests/`:
+
+| Folder | Executable | What is tested |
+| --- | --- | --- |
+| `tests/unit` | `airco_unit_tests` | one class at a time: `MessageQueue`, `Node`, `TemperatureNode`, `Airco` (with mocked observers) and `Monitor` (Qt only) |
+| `tests/integration` | `airco_integration_tests` | `Airco` + `TemperatureNode` + `MessageQueue` working together (fast simulation step), `Airco` -> `Monitor` Qt signals (Qt only) |
+| `tests/system` | `airco_system_tests` | the complete application wired like `main.cpp` with production timing, driven through user scenarios, and the real `MainWindow` driven through its buttons and slider (Qt only) |
+
+Build and run all tests:
+
+```sh
+mkdir build && cd build
+cmake -DCMAKE_PREFIX_PATH="/path/to/Qt/6.5.2/gcc_64" ..   # or: cmake -DAIRCO_BUILD_GUI=OFF ..
+make
+ctest --output-on-failure
+```
+
+Run one category: `ctest -L unit`, `ctest -L integration` or `ctest -L system`.
+The executables can also be started directly, e.g. `./tests/airco_unit_tests --gtest_filter=AircoTest.*`.
+
+The system tests use the real one-degree-per-second simulation, so they take a few seconds each.
+The GUI system tests run on the Qt `offscreen` platform on Linux/macOS (override with `QT_QPA_PLATFORM`).
+`TemperatureNode` takes an optional step interval (default 1 second) so the unit and integration tests can simulate faster.
 
 ## Usage
 * AUTO mode
@@ -69,6 +100,6 @@ Note : in this mode the temperature simulation will still go towards the set tar
 3. Concurrency
 - multithreaded : TemperatureNode has a simulation thread, Airco has an eventhandler thread and a temperature receiving thread
 - locking : Airco contains the lock_guard mechanism the protect the variable, same as MessageQueue.cpp
-- condition_variable : see Airco.cpp
+- condition_variable : see MessageQueue.cpp
 
 

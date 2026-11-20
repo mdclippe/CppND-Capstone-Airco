@@ -1,5 +1,6 @@
 #ifndef AIRCOOBSERVER_H
 #define AIRCOOBSERVER_H
+#include <string>
 
 class AircoObserver {
 public:

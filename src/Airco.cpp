@@ -42,8 +42,9 @@ void Airco::togglePower()
     }
     else
     {
-        setState(AircoStates::OFF);
+        // stop the reading thread first, otherwise it can overwrite the OFF state
         stop();
+        setState(AircoStates::OFF);
     }
 }
 

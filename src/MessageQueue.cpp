@@ -50,3 +50,8 @@ void MessageQueue<T>::unblock()
     _unblock = true;
     _condition.notify_all();
 }
+
+
+// the message types used in this project
+template class MessageQueue<int>;
+template class MessageQueue<std::string>;

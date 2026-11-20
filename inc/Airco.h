@@ -17,7 +17,7 @@ class Airco {
 public :
     explicit Airco(std::shared_ptr<MessageQueue<int>> messageQueue) : 
     _temperatureMessageQueue(messageQueue),
-    _isOn(false), _currentTemperature(20), _state(AircoStates::OFF), _mode(AircoModes::AUTO)
+    _currentTemperature(20), _state(AircoStates::OFF), _mode(AircoModes::AUTO), _isOn(false)
      {
         _eventHandlingThread = std::make_unique<std::thread>(&Airco::eventHandlingLoop, this);
         _targetTemperature = 20;
@@ -25,7 +25,6 @@ public :
     };
     ~Airco(){
         std::cout << "~Airco() called" << std::endl;
-        _observers.clear();
         if (_runningTemperatureReadings && _temperatureReadingThread != nullptr)
         {
             _runningTemperatureReadings = false;
@@ -39,7 +38,8 @@ public :
              _eventQueue.unblock();
             _eventHandlingThread->join();
         }
-
+        // only clear the observers once the threads that notify them are stopped
+        _observers.clear();
     }
     void togglePower();
     void handleEvent(std::string event);
@@ -50,6 +50,10 @@ public :
         std::lock_guard<std::mutex> lg(_mutex);
         return _state;
         }
+    AircoModes getMode() {
+        std::lock_guard<std::mutex> lg(_mode_mutex);
+        return _mode;
+    }
     void setState(AircoStates newState) {
         std::lock_guard<std::mutex> lg(_mutex);
         if (_state != newState)
@@ -79,7 +83,7 @@ private:
     std::atomic<bool> _runningEventHandler = true;
 
     std::vector<std::shared_ptr<AircoObserver>> _observers;
-    int _targetTemperature;
+    std::atomic<int> _targetTemperature;
     int _currentTemperature;
     AircoStates _state;
     AircoModes _mode;
